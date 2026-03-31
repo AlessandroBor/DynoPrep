@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/niceprogrammer/tauri-docs/refs/heads/main/src/content/docs/_schema/config.schema.json",
+  "productName": "DynoPrep",
+  "version": "1.0.0",
+  "identifier": "com.americandynos.dynoprep",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3456",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DynoPrep",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {}
+}
