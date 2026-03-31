@@ -82,7 +82,7 @@ export default function App() {
     if (!session || !processedData.length) return;
     try {
       const safeName = `${session.metadata.user}_${session.metadata.segment}`.replace(/[<>:"/\\|?*]+/g, "-").replace(/\s+/g, "_");
-      const path = await save({ filters: [{ name: "CSV Files", extensions: ["csv"] }], defaultPath: `${safeName}.csv` });
+      const path = await save({ filters: [{ name: "CSV Files", extensions: ["csv"] }], defaultPath: `${safeName}_DynoPrep.csv` });
       if (!path) return;
       const channelNames = ["Time", "RPM", ...(session.hasThrottle ? ["Throttle"] : []), session.gpsLatChannel, session.gpsLonChannel];
       const parts: string[] = [];
@@ -147,9 +147,9 @@ export default function App() {
         <div className="w-1/2 bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "url('/ad.svg')", backgroundSize: "60%", backgroundPosition: "center", backgroundRepeat: "no-repeat" }} />
           <div className="relative z-10 text-center">
-            <img src="/ad.svg" alt="American Dynos" className="w-32 h-32 mx-auto mb-6" />
+            <img src="/ad.svg" alt="American Dynos" className="hidden w-32 h-32 mx-auto mb-6" />
             <h1 className="text-5xl text-white tracking-tight mb-2 italic" style={{ fontFamily: "'Instrument Serif', serif" }}>DynoPrep</h1>
-            <p className="text-sm text-gray-500">by American Dynos</p>
+            <p className="text-sm text-gray-500">American Dynos</p>
           </div>
           <div className="absolute bottom-6 text-[10px] text-gray-700">v1.0.0</div>
         </div>
@@ -244,7 +244,7 @@ export default function App() {
               />
             </div>
             <div className="shrink-0 bg-white border-t border-gray-200 flex" style={{ height: 300 }}>
-              <div className="w-1/2 border-r border-gray-200 p-4 overflow-y-auto">
+              <div className="w-1/2 border-r border-gray-200 p-4 overflow-y-auto select-text">
                 <div className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-3">Session</div>
                 <div className="space-y-2">
                   {[

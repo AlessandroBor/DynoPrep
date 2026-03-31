@@ -24,6 +24,14 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow selection in text inputs */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Range slider — brand red */

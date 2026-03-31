@@ -32,7 +32,7 @@ interface ChannelConfig {
 
 export default function DataCharts({
   data,
-  hasThrottle,
+  hasThrottle: _hasThrottle,
   selectedTime,
   onSelectTime,
   onHoverTime,
@@ -229,7 +229,7 @@ export default function DataCharts({
 
             {activeAxes.has("rpm") && (
               <YAxis yAxisId="rpm" orientation="left"
-                tick={{ fontSize: 10, fill: "#6b7280", angle: -90, textAnchor: "middle", dx: -10 }}
+                tick={{ fontSize: 10, fill: "#6b7280" } as any}
                 width={60} tickFormatter={(v) => `${Math.round(Number(v))}`}
                 axisLine={{ stroke: "#9ca3af" }} tickLine={{ stroke: "#9ca3af" }}
                 label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 0, style: { fontSize: 12, fill: "#6b7280", fontWeight: 700 } }}
@@ -237,7 +237,7 @@ export default function DataCharts({
             )}
             {activeAxes.has("pct") && (
               <YAxis yAxisId="pct" orientation="right"
-                tick={{ fontSize: 10, fill: "#6b7280", angle: 90, textAnchor: "middle", dx: 10 }}
+                tick={{ fontSize: 10, fill: "#6b7280" } as any}
                 width={60} domain={[0, 100]} tickFormatter={(v) => `${Math.round(Number(v))}`}
                 axisLine={{ stroke: "#9ca3af" }} tickLine={{ stroke: "#9ca3af" }}
                 label={{ value: "Throttle (%)", angle: 90, position: "insideRight", offset: 0, style: { fontSize: 12, fill: "#6b7280", fontWeight: 700 } }}
@@ -245,7 +245,7 @@ export default function DataCharts({
             )}
             {activeAxes.has("gps") && (
               <YAxis yAxisId="gps" orientation="right"
-                tick={{ fontSize: 9, fill: "#6b7280", angle: 90, textAnchor: "middle", dx: 10 }}
+                tick={{ fontSize: 9, fill: "#6b7280" } as any}
                 width={65} tickFormatter={(v) => Number(v).toFixed(3)}
                 axisLine={{ stroke: "#9ca3af" }} tickLine={{ stroke: "#9ca3af" }}
                 label={{ value: "GPS", angle: 90, position: "insideRight", offset: 5, style: { fontSize: 11, fill: "#6b7280", fontWeight: 600 } }}

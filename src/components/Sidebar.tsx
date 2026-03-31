@@ -9,7 +9,7 @@ interface SidebarProps {
   onFiltersChange: (filters: FilterSettings) => void;
   onImport: () => void;
   onExport: () => void;
-  onClose: () => void;
+  onClose?: () => void;
   dataPointCount: number;
   filteredCount: number;
   channels: string[];
@@ -35,7 +35,7 @@ export default function Sidebar({
   onFiltersChange,
   onImport,
   onExport,
-  onClose,
+  onClose: _onClose,
   dataPointCount,
   filteredCount,
   channels,
