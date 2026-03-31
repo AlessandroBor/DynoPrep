@@ -3,8 +3,11 @@ import { DataPoint } from "./csvParser";
 export interface FilterSettings {
   interpolationSteps: Record<string, number>; // per-channel step in seconds
   transitionEnabled: boolean;
-  transitionDuration: number; // seconds
+  transitionDuration: number; // start transition duration (seconds)
   transitionStartRpm: number; // RPM to start the ramp from
+  endTransitionEnabled: boolean;
+  endTransitionDuration: number; // end transition duration (seconds)
+  endTransitionRpm: number; // RPM to ramp down to
   throttleCeiling: number; // sensor ceiling % — values at this level become 100%
   throttleFloor: number; // minimum throttle % — values below are clamped up
   throttleDecimals: boolean; // use decimal precision for throttle output
@@ -15,6 +18,9 @@ export const DEFAULT_FILTERS: FilterSettings = {
   transitionEnabled: false,
   transitionDuration: 10,
   transitionStartRpm: 4000,
+  endTransitionEnabled: false,
+  endTransitionDuration: 5,
+  endTransitionRpm: 2000,
   throttleCeiling: 100,
   throttleFloor: 0,
   throttleDecimals: false,
@@ -150,6 +156,35 @@ export function applyTransition(data: DataPoint[], duration: number, step: numbe
   }));
 
   return [...ramp, ...shifted];
+}
+
+/**
+ * Append a smooth RPM ramp down from the last data point's RPM to endRpm.
+ * Throttle is set to 0% during the ramp down.
+ * GPS values are held constant at the last point's position.
+ */
+export function applyEndTransition(data: DataPoint[], duration: number, step: number, endRpm: number = 0): DataPoint[] {
+  if (data.length === 0 || duration <= 0) return data;
+
+  const last = data[data.length - 1];
+  const lastTime = last.time;
+  const startRpm = last.rpm;
+  const ramp: DataPoint[] = [];
+  const timeStep = Math.max(step, 0.01);
+
+  for (let t = timeStep; t <= duration; t = Math.round((t + timeStep) * 1000) / 1000) {
+    const frac = t / duration;
+    const smooth = (1 - Math.cos(frac * Math.PI)) / 2; // 0 → 1 smoothly
+    ramp.push({
+      time: Math.round((lastTime + t) * 1000) / 1000,
+      rpm: startRpm + smooth * (endRpm - startRpm),
+      throttle: 0,
+      gpsLat: last.gpsLat,
+      gpsLon: last.gpsLon,
+    });
+  }
+
+  return [...data, ...ramp];
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   defaultInterpolationSteps,
   interpolateData,
   applyTransition,
+  applyEndTransition,
   remapThrottle,
 } from "./utils/filtering";
 import Sidebar from "./components/Sidebar";
@@ -66,9 +67,12 @@ export default function App() {
     if (!session) return [];
     let data = interpolateData(session.data, filters.interpolationSteps);
     data = remapThrottle(data, filters.throttleCeiling ?? 100, filters.throttleFloor ?? 0);
+    const minStep = Math.min(...Object.values(filters.interpolationSteps).filter((v) => v > 0), 0.1);
     if (transitionEnabled && data.length > 0) {
-      const minStep = Math.min(...Object.values(filters.interpolationSteps).filter((v) => v > 0), 0.1);
       data = applyTransition(data, transitionDuration, minStep, filters.transitionStartRpm ?? 4000);
+    }
+    if ((filters.endTransitionEnabled ?? false) && data.length > 0) {
+      data = applyEndTransition(data, filters.endTransitionDuration ?? 5, minStep, filters.endTransitionRpm ?? 2000);
     }
     return data;
   }, [session, filters, transitionEnabled, transitionDuration]);

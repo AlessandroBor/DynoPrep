@@ -283,107 +283,91 @@ export default function Sidebar({
             </div>
           )}
 
-          {/* Dyno Transition */}
+          {/* Start Transition */}
           <div className="px-4 py-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
-                Dyno Transition
+                Start Transition
               </h2>
               <div className="flex items-center gap-2">
-                <ResetButton
-                  onClick={() =>
-                    onFiltersChange({
-                      ...filters,
-                      transitionEnabled: DEFAULT_FILTERS.transitionEnabled,
-                      transitionDuration: DEFAULT_FILTERS.transitionDuration,
-                      transitionStartRpm: DEFAULT_FILTERS.transitionStartRpm,
-                    })
-                  }
-                />
-                <button
-                  onClick={() =>
-                    onFiltersChange({ ...filters, transitionEnabled: !transitionEnabled })
-                  }
-                  className={`relative w-9 h-5 rounded-full transition-colors ${
-                    transitionEnabled ? "bg-red-600" : "bg-gray-300"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                      transitionEnabled ? "translate-x-4" : "translate-x-0.5"
-                    }`}
-                  />
+                <ResetButton onClick={() => onFiltersChange({ ...filters, transitionEnabled: DEFAULT_FILTERS.transitionEnabled, transitionDuration: DEFAULT_FILTERS.transitionDuration, transitionStartRpm: DEFAULT_FILTERS.transitionStartRpm })} />
+                <button onClick={() => onFiltersChange({ ...filters, transitionEnabled: !transitionEnabled })}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${transitionEnabled ? "bg-red-600" : "bg-gray-300"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${transitionEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
                 </button>
               </div>
             </div>
             {transitionEnabled && (
               <div>
                 <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
-                  Smooth ramp {transitionStartRpm > 0 ? `${transitionStartRpm.toLocaleString()} RPM` : "0"} → first RPM. Throttle at 100%.
+                  Ramp up {transitionStartRpm > 0 ? `${transitionStartRpm.toLocaleString()}` : "0"} → first RPM. Throttle at 100%.
                 </p>
-
-                {/* Duration */}
                 <div className="flex justify-between items-center mb-1.5">
                   <span className="text-xs font-medium text-gray-600">Duration</span>
                   <span className="text-[10px] text-gray-500 font-mono">{transitionDuration}s</span>
                 </div>
                 <div className="flex items-center gap-2 mb-4">
-                  <input
-                    type="range"
-                    className="flex-1"
-                    min={1}
-                    max={30}
-                    step={0.5}
-                    value={transitionDuration}
-                    onChange={(e) =>
-                      onFiltersChange({ ...filters, transitionDuration: parseFloat(e.target.value) })
-                    }
-                  />
-                  <input
-                    type="number"
-                    className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
-                    value={transitionDuration}
-                    min={0.5}
-                    max={60}
-                    step={0.5}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (!isNaN(v) && v > 0)
-                        onFiltersChange({ ...filters, transitionDuration: v });
-                    }}
-                  />
+                  <input type="range" className="flex-1" min={1} max={30} step={0.5} value={transitionDuration}
+                    onChange={(e) => onFiltersChange({ ...filters, transitionDuration: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={transitionDuration} min={0.5} max={60} step={0.5}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) onFiltersChange({ ...filters, transitionDuration: v }); }} />
                 </div>
-
-                {/* Start RPM */}
                 <div className="flex justify-between items-center mb-1.5">
                   <span className="text-xs font-medium text-gray-600">Start RPM</span>
                   <span className="text-[10px] text-gray-500 font-mono">{transitionStartRpm.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    className="flex-1"
-                    min={0}
-                    max={10000}
-                    step={100}
-                    value={transitionStartRpm}
-                    onChange={(e) =>
-                      onFiltersChange({ ...filters, transitionStartRpm: parseInt(e.target.value) })
-                    }
-                  />
-                  <input
-                    type="number"
-                    className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
-                    value={transitionStartRpm}
-                    min={0}
-                    max={20000}
-                    step={100}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value);
-                      if (!isNaN(v) && v >= 0)
-                        onFiltersChange({ ...filters, transitionStartRpm: v });
-                    }}
-                  />
+                  <input type="range" className="flex-1" min={0} max={10000} step={100} value={transitionStartRpm}
+                    onChange={(e) => onFiltersChange({ ...filters, transitionStartRpm: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={transitionStartRpm} min={0} max={20000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, transitionStartRpm: v }); }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* End Transition */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                End Transition
+              </h2>
+              <div className="flex items-center gap-2">
+                <ResetButton onClick={() => onFiltersChange({ ...filters, endTransitionEnabled: DEFAULT_FILTERS.endTransitionEnabled, endTransitionDuration: DEFAULT_FILTERS.endTransitionDuration, endTransitionRpm: DEFAULT_FILTERS.endTransitionRpm })} />
+                <button onClick={() => onFiltersChange({ ...filters, endTransitionEnabled: !(filters.endTransitionEnabled ?? false) })}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${(filters.endTransitionEnabled ?? false) ? "bg-red-600" : "bg-gray-300"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${(filters.endTransitionEnabled ?? false) ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            {(filters.endTransitionEnabled ?? false) && (
+              <div>
+                <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
+                  Ramp down last RPM → {(filters.endTransitionRpm ?? 2000).toLocaleString()}. Throttle at 0%.
+                </p>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Duration</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{(filters.endTransitionDuration ?? 5)}s</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={1} max={30} step={0.5} value={filters.endTransitionDuration ?? 5}
+                    onChange={(e) => onFiltersChange({ ...filters, endTransitionDuration: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={filters.endTransitionDuration ?? 5} min={0.5} max={60} step={0.5}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) onFiltersChange({ ...filters, endTransitionDuration: v }); }} />
+                </div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">End RPM</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{(filters.endTransitionRpm ?? 2000).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" className="flex-1" min={0} max={10000} step={100} value={filters.endTransitionRpm ?? 2000}
+                    onChange={(e) => onFiltersChange({ ...filters, endTransitionRpm: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={filters.endTransitionRpm ?? 2000} min={0} max={20000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, endTransitionRpm: v }); }} />
                 </div>
               </div>
             )}
