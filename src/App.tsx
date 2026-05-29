@@ -11,6 +11,7 @@ import {
   applyTransition,
   applyEndTransition,
   remapThrottle,
+  applyRpmLimit,
 } from "./utils/filtering";
 import Sidebar from "./components/Sidebar";
 import DataCharts from "./components/DataCharts";
@@ -67,6 +68,11 @@ export default function App() {
     if (!session) return [];
     let data = interpolateData(session.data, filters.interpolationSteps);
     data = remapThrottle(data, filters.throttleCeiling ?? 100, filters.throttleFloor ?? 0);
+    // Break-in RPM limiter — applied to the core lap before the start/end ramps,
+    // so the ramps target the already-limited first/last RPM.
+    if (filters.rpmLimitEnabled ?? false) {
+      data = applyRpmLimit(data, filters.rpmLimitOnset ?? 8000, filters.rpmLimitCeiling ?? 11000);
+    }
     const minStep = Math.min(...Object.values(filters.interpolationSteps).filter((v) => v > 0), 0.1);
     if (transitionEnabled && data.length > 0) {
       data = applyTransition(data, transitionDuration, minStep, filters.transitionStartRpm ?? 4000);
@@ -76,6 +82,19 @@ export default function App() {
     }
     return data;
   }, [session, filters, transitionEnabled, transitionDuration]);
+
+  // Peak RPM readout for the Break-In Limiter: raw (pre-limit) vs resulting (post-limit).
+  const rpmPeakOriginal = useMemo(() => {
+    if (!session) return 0;
+    let m = 0;
+    for (const d of session.data) if (d.rpm > m) m = d.rpm;
+    return m;
+  }, [session]);
+  const rpmPeakLimited = useMemo(() => {
+    let m = 0;
+    for (const d of processedData) if (d.rpm > m) m = d.rpm;
+    return m;
+  }, [processedData]);
 
   const handleThrottleHover = useCallback(
     (time: number | null) => { setHoveredTime(time !== null ? time + timeOffset : null); },
@@ -136,7 +155,7 @@ export default function App() {
         case "tab-data": setActiveTab("data"); break;
         case "tab-throttle": setActiveTab("throttle"); break;
         case "about":
-          setToast("DynoPrep v1.0.0 — by American Dynos");
+          setToast("DynoPrep v1.0.1 — by American Dynos");
           setTimeout(() => setToast(null), 3000);
           break;
       }
@@ -155,7 +174,7 @@ export default function App() {
             <h1 className="text-5xl text-white tracking-tight mb-2 italic" style={{ fontFamily: "'Instrument Serif', serif" }}>DynoPrep</h1>
             <p className="text-sm text-gray-500">American Dynos</p>
           </div>
-          <div className="absolute bottom-6 text-[10px] text-gray-700">v1.0.0</div>
+          <div className="absolute bottom-6 text-[10px] text-gray-700">v1.0.1</div>
         </div>
 
         {/* Right action panel */}
@@ -209,6 +228,7 @@ export default function App() {
         onFiltersChange={setFilters} onImport={handleImport} onExport={handleExport} onClose={handleClose}
         dataPointCount={session.data.length} filteredCount={processedData.length}
         channels={session.channels} hasThrottle={session.hasThrottle}
+        rpmPeakOriginal={rpmPeakOriginal} rpmPeakLimited={rpmPeakLimited}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative min-h-0 min-w-0">
@@ -245,6 +265,9 @@ export default function App() {
               <DataCharts
                 data={processedData} hasThrottle={session.hasThrottle}
                 selectedTime={selectedTime} onSelectTime={setSelectedTime} onHoverTime={setHoveredTime}
+                rpmLimitEnabled={filters.rpmLimitEnabled ?? false}
+                rpmLimitOnset={filters.rpmLimitOnset ?? 8000}
+                rpmLimitCeiling={filters.rpmLimitCeiling ?? 11000}
               />
             </div>
             <div className="shrink-0 bg-white border-t border-gray-200 flex" style={{ height: 300 }}>

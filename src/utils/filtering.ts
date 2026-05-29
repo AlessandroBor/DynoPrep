@@ -11,6 +11,9 @@ export interface FilterSettings {
   throttleCeiling: number; // sensor ceiling % — values at this level become 100%
   throttleFloor: number; // minimum throttle % — values below are clamped up
   throttleDecimals: boolean; // use decimal precision for throttle output
+  rpmLimitEnabled: boolean; // break-in RPM limiter on/off
+  rpmLimitOnset: number; // RPM where the soft rolloff begins
+  rpmLimitCeiling: number; // hard asymptotic RPM ceiling (approached, never reached)
 }
 
 export const DEFAULT_FILTERS: FilterSettings = {
@@ -24,6 +27,9 @@ export const DEFAULT_FILTERS: FilterSettings = {
   throttleCeiling: 100,
   throttleFloor: 0,
   throttleDecimals: false,
+  rpmLimitEnabled: false,
+  rpmLimitOnset: 8000,
+  rpmLimitCeiling: 11000,
 };
 
 export function defaultInterpolationSteps(channels: string[], sampleRate: number): Record<string, number> {
@@ -212,4 +218,33 @@ export function remapThrottle(data: DataPoint[], ceiling: number, floor: number)
     }
     return { ...d, throttle: t };
   });
+}
+
+/**
+ * Break-in RPM limiter — soft-knee curve for a single value.
+ *
+ * Below `onset`, RPM passes through unchanged (low/mid-range detail preserved).
+ * Above `onset`, the value rolls off along a hyperbolic-tangent curve that
+ * approaches `ceiling` asymptotically but NEVER reaches it — so the engine is
+ * structurally prevented from ever sitting pinned at the hard limit, and there
+ * are no flat plateaus. The curve is C¹-continuous at the onset (slope = 1 there,
+ * easing smoothly above), so there is no kink where limiting begins.
+ *
+ *   out = onset + band * tanh((rpm - onset) / band)   where band = ceiling - onset
+ */
+export function softLimitRpm(rpm: number, onset: number, ceiling: number): number {
+  // Defensive: a degenerate/invalid band falls back to a plain clamp.
+  if (ceiling <= 0 || ceiling <= onset) return Math.min(rpm, Math.max(ceiling, 0));
+  if (rpm <= onset) return rpm;
+  const band = ceiling - onset;
+  return onset + band * Math.tanh((rpm - onset) / band);
+}
+
+/**
+ * Apply the break-in RPM limiter to every data point's RPM.
+ * Touches RPM only; throttle and GPS are left untouched.
+ */
+export function applyRpmLimit(data: DataPoint[], onset: number, ceiling: number): DataPoint[] {
+  if (data.length === 0) return data;
+  return data.map((d) => ({ ...d, rpm: softLimitRpm(d.rpm, onset, ceiling) }));
 }

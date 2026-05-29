@@ -18,6 +18,9 @@ interface DataChartsProps {
   selectedTime: number | null;
   onSelectTime: (time: number | null) => void;
   onHoverTime?: (time: number | null) => void;
+  rpmLimitEnabled?: boolean;
+  rpmLimitOnset?: number;
+  rpmLimitCeiling?: number;
 }
 
 interface ChannelConfig {
@@ -36,6 +39,9 @@ export default function DataCharts({
   selectedTime,
   onSelectTime,
   onHoverTime,
+  rpmLimitEnabled = false,
+  rpmLimitOnset = 8000,
+  rpmLimitCeiling = 11000,
 }: DataChartsProps) {
   const allChannels: ChannelConfig[] = [
     { id: "rpm", label: "RPM", dataKey: "rpm", color: "#dc2626", unit: "rpm", yAxisId: "rpm", available: true },
@@ -286,6 +292,16 @@ export default function DataCharts({
 
             {selectedTime !== null && (
               <ReferenceLine x={selectedTime} stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="6 3" yAxisId="rpm" />
+            )}
+
+            {/* Break-in limiter zones: ceiling (hard limit) + onset (rolloff start) */}
+            {rpmLimitEnabled && activeAxes.has("rpm") && (
+              <ReferenceLine y={rpmLimitCeiling} yAxisId="rpm" stroke="#dc2626" strokeWidth={1} strokeDasharray="5 4"
+                label={{ value: `Ceiling ${rpmLimitCeiling.toLocaleString()}`, position: "insideTopRight", fontSize: 9, fill: "#dc2626" }} />
+            )}
+            {rpmLimitEnabled && activeAxes.has("rpm") && (
+              <ReferenceLine y={rpmLimitOnset} yAxisId="rpm" stroke="#9ca3af" strokeWidth={1} strokeDasharray="3 4"
+                label={{ value: `Onset ${rpmLimitOnset.toLocaleString()}`, position: "insideBottomRight", fontSize: 9, fill: "#9ca3af" }} />
             )}
 
             {dragStart !== null && dragEnd !== null && Math.abs(dragEnd - dragStart) > 0.5 && (

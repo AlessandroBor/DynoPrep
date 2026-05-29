@@ -14,6 +14,8 @@ interface SidebarProps {
   filteredCount: number;
   channels: string[];
   hasThrottle: boolean;
+  rpmPeakOriginal: number;
+  rpmPeakLimited: number;
 }
 
 function ResetButton({ onClick }: { onClick: () => void }) {
@@ -40,6 +42,8 @@ export default function Sidebar({
   filteredCount,
   channels,
   hasThrottle,
+  rpmPeakOriginal,
+  rpmPeakLimited,
 }: SidebarProps) {
   // Safe defaults in case filters state is stale from HMR
   const throttleCeiling = filters.throttleCeiling ?? 100;
@@ -47,6 +51,9 @@ export default function Sidebar({
   const transitionEnabled = filters.transitionEnabled ?? false;
   const transitionDuration = filters.transitionDuration ?? 10;
   const transitionStartRpm = filters.transitionStartRpm ?? 4000;
+  const rpmLimitEnabled = filters.rpmLimitEnabled ?? false;
+  const rpmLimitOnset = filters.rpmLimitOnset ?? 8000;
+  const rpmLimitCeiling = filters.rpmLimitCeiling ?? 11000;
 
   const updateChannelStep = (channel: string, value: number) => {
     if (isNaN(value) || value <= 0) return;
@@ -282,6 +289,67 @@ export default function Sidebar({
 
             </div>
           )}
+
+          {/* Break-In Limiter */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                Break-In Limiter
+              </h2>
+              <div className="flex items-center gap-2">
+                <ResetButton onClick={() => onFiltersChange({ ...filters, rpmLimitEnabled: DEFAULT_FILTERS.rpmLimitEnabled, rpmLimitOnset: DEFAULT_FILTERS.rpmLimitOnset, rpmLimitCeiling: DEFAULT_FILTERS.rpmLimitCeiling })} />
+                <button onClick={() => onFiltersChange({ ...filters, rpmLimitEnabled: !rpmLimitEnabled })}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${rpmLimitEnabled ? "bg-red-600" : "bg-gray-300"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${rpmLimitEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            {rpmLimitEnabled && (
+              <div>
+                <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
+                  Rolls off RPM above the onset toward the ceiling — a hard limit it approaches but never reaches. Protects fresh pistons during break-in.
+                </p>
+
+                {/* Peak readout — preview the true top RPM these settings produce */}
+                <div className="mb-4 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Raw peak</span>
+                    <span className="text-[11px] font-mono text-gray-500">{Math.round(rpmPeakOriginal).toLocaleString()} rpm</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-[10px] font-semibold text-gray-700">Resulting peak</span>
+                    <span className="text-[12px] font-mono font-semibold text-red-600">~{Math.round(rpmPeakLimited).toLocaleString()} rpm</span>
+                  </div>
+                </div>
+
+                {/* Onset */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Onset</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{rpmLimitOnset.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={4000} max={14000} step={100} value={rpmLimitOnset}
+                    onChange={(e) => onFiltersChange({ ...filters, rpmLimitOnset: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={rpmLimitOnset} min={0} max={20000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, rpmLimitOnset: v }); }} />
+                </div>
+
+                {/* Ceiling */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Ceiling</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{rpmLimitCeiling.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" className="flex-1" min={8000} max={16000} step={100} value={rpmLimitCeiling}
+                    onChange={(e) => onFiltersChange({ ...filters, rpmLimitCeiling: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={rpmLimitCeiling} min={0} max={25000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, rpmLimitCeiling: v }); }} />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Start Transition */}
           <div className="px-4 py-4 border-t border-gray-200">

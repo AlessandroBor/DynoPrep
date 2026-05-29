@@ -1,6 +1,6 @@
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::Emitter;
-// DynoPrep v1.0.0
+// DynoPrep v1.0.1
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/niceprogrammer/tauri-docs/refs/heads/main/src/content/docs/_schema/config.schema.json",
   "productName": "DynoPrep",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.americandynos.dynoprep",
   "build": {
     "beforeDevCommand": "npm run dev",
