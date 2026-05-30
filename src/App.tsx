@@ -11,7 +11,10 @@ import {
   applyTransition,
   applyEndTransition,
   remapThrottle,
-  applyRpmLimit,
+  applyBreakInCycle,
+  applyLapTimeCorrection,
+  correctedLapTime,
+  resolveDecay,
 } from "./utils/filtering";
 import Sidebar from "./components/Sidebar";
 import DataCharts from "./components/DataCharts";
@@ -64,24 +67,51 @@ export default function App() {
     [session, filters]
   );
 
-  const processedData = useMemo(() => {
-    if (!session) return [];
+  const processed = useMemo(() => {
+    const empty = { data: [] as DataPoint[], lapTimeOriginal: 0, lapTimeCorrected: 0 };
+    if (!session) return empty;
     let data = interpolateData(session.data, filters.interpolationSteps);
     data = remapThrottle(data, filters.throttleCeiling ?? 100, filters.throttleFloor ?? 0);
-    // Break-in RPM limiter — applied to the core lap before the start/end ramps,
-    // so the ramps target the already-limited first/last RPM.
-    if (filters.rpmLimitEnabled ?? false) {
-      data = applyRpmLimit(data, filters.rpmLimitOnset ?? 8000, filters.rpmLimitCeiling ?? 11000);
+    const original = data; // pre-break-in lap, for the lap-time stretch reference
+
+    // Break-in load/unload cycle — applied to the core lap before the start/end
+    // ramps, so the ramps target the already-shaped first/last RPM.
+    const breakInOn = filters.breakInEnabled ?? false;
+    let limited = data;
+    if (breakInOn) {
+      limited = applyBreakInCycle(data, {
+        limitRpm: filters.breakInLimitRpm ?? 13500,
+        floorRpm: filters.breakInFloorRpm ?? 7000,
+        decayRate: filters.breakInDecayRate ?? 1000,
+        decayDuration: filters.breakInDecayDuration ?? 2,
+        resumeRate: filters.breakInResumeRate ?? 2000,
+        smoothing: filters.breakInSmoothing ?? 0.25,
+        throttleResume: filters.breakInThrottleResume ?? 0.5,
+      });
     }
+
     const minStep = Math.min(...Object.values(filters.interpolationSteps).filter((v) => v > 0), 0.1);
-    if (transitionEnabled && data.length > 0) {
-      data = applyTransition(data, transitionDuration, minStep, filters.transitionStartRpm ?? 4000);
+
+    // Lap-time correction: where the break-in pulled RPM down, the kart would be
+    // slower, so the timeline is stretched to match (and the total lap time grows).
+    const lapTimeOriginal = original.length > 1 ? original[original.length - 1].time - original[0].time : 0;
+    const lapTimeCorrected = breakInOn ? correctedLapTime(original, limited) : lapTimeOriginal;
+    let core = limited;
+    if (breakInOn && (filters.lapTimeCorrectionEnabled ?? false)) {
+      core = applyLapTimeCorrection(original, limited, minStep);
     }
-    if ((filters.endTransitionEnabled ?? false) && data.length > 0) {
-      data = applyEndTransition(data, filters.endTransitionDuration ?? 5, minStep, filters.endTransitionRpm ?? 2000);
+
+    let out = core;
+    if (transitionEnabled && out.length > 0) {
+      out = applyTransition(out, transitionDuration, minStep, filters.transitionStartRpm ?? 4000);
     }
-    return data;
+    if ((filters.endTransitionEnabled ?? false) && out.length > 0) {
+      out = applyEndTransition(out, filters.endTransitionDuration ?? 5, minStep, filters.endTransitionRpm ?? 2000);
+    }
+    return { data: out, lapTimeOriginal, lapTimeCorrected };
   }, [session, filters, transitionEnabled, transitionDuration]);
+
+  const processedData = processed.data;
 
   // Peak RPM readout for the Break-In Limiter: raw (pre-limit) vs resulting (post-limit).
   const rpmPeakOriginal = useMemo(() => {
@@ -95,6 +125,28 @@ export default function App() {
     for (const d of processedData) if (d.rpm > m) m = d.rpm;
     return m;
   }, [processedData]);
+
+  // Break-in cycle preview: where each lift-off lands, whether the floor caps it,
+  // and how many lift-offs the current settings produce on this lap.
+  const breakInInfo = useMemo(() => {
+    const limit = filters.breakInLimitRpm ?? 13500;
+    const floor = filters.breakInFloorRpm ?? 7000;
+    const { endRpm, floorLimited } = resolveDecay(
+      limit,
+      Math.min(floor, limit),
+      filters.breakInDecayRate ?? 1000,
+      filters.breakInDecayDuration ?? 2
+    );
+    // Count lift-offs = rising edges where the processed RPM reaches the limit.
+    let cycles = 0;
+    let above = false;
+    for (const d of processedData) {
+      const atLimit = d.rpm >= limit - 0.5;
+      if (atLimit && !above) cycles++;
+      above = atLimit;
+    }
+    return { bottomRpm: endRpm, floorLimited, cycles };
+  }, [processedData, filters.breakInLimitRpm, filters.breakInFloorRpm, filters.breakInDecayRate, filters.breakInDecayDuration]);
 
   const handleThrottleHover = useCallback(
     (time: number | null) => { setHoveredTime(time !== null ? time + timeOffset : null); },
@@ -229,6 +281,9 @@ export default function App() {
         dataPointCount={session.data.length} filteredCount={processedData.length}
         channels={session.channels} hasThrottle={session.hasThrottle}
         rpmPeakOriginal={rpmPeakOriginal} rpmPeakLimited={rpmPeakLimited}
+        breakInBottomRpm={breakInInfo.bottomRpm} breakInFloorLimited={breakInInfo.floorLimited}
+        breakInCycles={breakInInfo.cycles}
+        lapTimeOriginal={processed.lapTimeOriginal} lapTimeCorrected={processed.lapTimeCorrected}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative min-h-0 min-w-0">
@@ -265,9 +320,9 @@ export default function App() {
               <DataCharts
                 data={processedData} hasThrottle={session.hasThrottle}
                 selectedTime={selectedTime} onSelectTime={setSelectedTime} onHoverTime={setHoveredTime}
-                rpmLimitEnabled={filters.rpmLimitEnabled ?? false}
-                rpmLimitOnset={filters.rpmLimitOnset ?? 8000}
-                rpmLimitCeiling={filters.rpmLimitCeiling ?? 11000}
+                breakInEnabled={filters.breakInEnabled ?? false}
+                breakInLimitRpm={filters.breakInLimitRpm ?? 13500}
+                breakInFloorRpm={filters.breakInFloorRpm ?? 7000}
               />
             </div>
             <div className="shrink-0 bg-white border-t border-gray-200 flex" style={{ height: 300 }}>

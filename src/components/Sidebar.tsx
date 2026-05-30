@@ -16,6 +16,19 @@ interface SidebarProps {
   hasThrottle: boolean;
   rpmPeakOriginal: number;
   rpmPeakLimited: number;
+  breakInBottomRpm: number;
+  breakInFloorLimited: boolean;
+  breakInCycles: number;
+  lapTimeOriginal: number;
+  lapTimeCorrected: number;
+}
+
+/** Format seconds as m:ss.mmm (matching the MyChron segment style). */
+function formatLapTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds - m * 60;
+  return m > 0 ? `${m}:${s.toFixed(3).padStart(6, "0")}` : `${s.toFixed(3)}s`;
 }
 
 function ResetButton({ onClick }: { onClick: () => void }) {
@@ -44,6 +57,11 @@ export default function Sidebar({
   hasThrottle,
   rpmPeakOriginal,
   rpmPeakLimited,
+  breakInBottomRpm,
+  breakInFloorLimited,
+  breakInCycles,
+  lapTimeOriginal,
+  lapTimeCorrected,
 }: SidebarProps) {
   // Safe defaults in case filters state is stale from HMR
   const throttleCeiling = filters.throttleCeiling ?? 100;
@@ -51,9 +69,15 @@ export default function Sidebar({
   const transitionEnabled = filters.transitionEnabled ?? false;
   const transitionDuration = filters.transitionDuration ?? 10;
   const transitionStartRpm = filters.transitionStartRpm ?? 4000;
-  const rpmLimitEnabled = filters.rpmLimitEnabled ?? false;
-  const rpmLimitOnset = filters.rpmLimitOnset ?? 8000;
-  const rpmLimitCeiling = filters.rpmLimitCeiling ?? 11000;
+  const breakInEnabled = filters.breakInEnabled ?? false;
+  const breakInLimitRpm = filters.breakInLimitRpm ?? 13500;
+  const breakInFloorRpm = filters.breakInFloorRpm ?? 7000;
+  const breakInDecayRate = filters.breakInDecayRate ?? 1000;
+  const breakInDecayDuration = filters.breakInDecayDuration ?? 2;
+  const breakInResumeRate = filters.breakInResumeRate ?? 2000;
+  const breakInSmoothing = filters.breakInSmoothing ?? 0.25;
+  const breakInThrottleResume = filters.breakInThrottleResume ?? 0.5;
+  const lapTimeCorrectionEnabled = filters.lapTimeCorrectionEnabled ?? false;
 
   const updateChannelStep = (channel: string, value: number) => {
     if (isNaN(value) || value <= 0) return;
@@ -290,62 +314,180 @@ export default function Sidebar({
             </div>
           )}
 
-          {/* Break-In Limiter */}
+          {/* Break-In Cycle */}
           <div className="px-4 py-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
-                Break-In Limiter
+                Break-In Cycle
               </h2>
               <div className="flex items-center gap-2">
-                <ResetButton onClick={() => onFiltersChange({ ...filters, rpmLimitEnabled: DEFAULT_FILTERS.rpmLimitEnabled, rpmLimitOnset: DEFAULT_FILTERS.rpmLimitOnset, rpmLimitCeiling: DEFAULT_FILTERS.rpmLimitCeiling })} />
-                <button onClick={() => onFiltersChange({ ...filters, rpmLimitEnabled: !rpmLimitEnabled })}
-                  className={`relative w-9 h-5 rounded-full transition-colors ${rpmLimitEnabled ? "bg-red-600" : "bg-gray-300"}`}>
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${rpmLimitEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                <ResetButton onClick={() => onFiltersChange({ ...filters,
+                  breakInEnabled: DEFAULT_FILTERS.breakInEnabled,
+                  breakInLimitRpm: DEFAULT_FILTERS.breakInLimitRpm,
+                  breakInFloorRpm: DEFAULT_FILTERS.breakInFloorRpm,
+                  breakInDecayRate: DEFAULT_FILTERS.breakInDecayRate,
+                  breakInDecayDuration: DEFAULT_FILTERS.breakInDecayDuration,
+                  breakInResumeRate: DEFAULT_FILTERS.breakInResumeRate,
+                  breakInSmoothing: DEFAULT_FILTERS.breakInSmoothing,
+                  breakInThrottleResume: DEFAULT_FILTERS.breakInThrottleResume,
+                  lapTimeCorrectionEnabled: DEFAULT_FILTERS.lapTimeCorrectionEnabled })} />
+                <button onClick={() => onFiltersChange({ ...filters, breakInEnabled: !breakInEnabled })}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${breakInEnabled ? "bg-red-600" : "bg-gray-300"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${breakInEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
                 </button>
               </div>
             </div>
-            {rpmLimitEnabled && (
+            {breakInEnabled && (
               <div>
                 <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
-                  Rolls off RPM above the onset toward the ceiling — a hard limit it approaches but never reaches. Protects fresh pistons during break-in.
+                  At the limit the throttle lifts and RPM falls at the decay rate for the set duration, then climbs back into the lap data — repeating to seat the rings. A drop that would pass the floor is auto-slowed to land on it.
                 </p>
 
-                {/* Peak readout — preview the true top RPM these settings produce */}
-                <div className="mb-4 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                {/* Cycle readout — preview what these settings produce */}
+                <div className="mb-4 rounded border border-gray-200 bg-gray-50 px-3 py-2 space-y-1">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-gray-500">Raw peak</span>
                     <span className="text-[11px] font-mono text-gray-500">{Math.round(rpmPeakOriginal).toLocaleString()} rpm</span>
                   </div>
-                  <div className="flex justify-between items-center mt-1">
-                    <span className="text-[10px] font-semibold text-gray-700">Resulting peak</span>
-                    <span className="text-[12px] font-mono font-semibold text-red-600">~{Math.round(rpmPeakLimited).toLocaleString()} rpm</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-semibold text-gray-700">Lift-off at</span>
+                    <span className="text-[12px] font-mono font-semibold text-red-600">{Math.round(rpmPeakLimited).toLocaleString()} rpm</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Drops to</span>
+                    <span className="text-[11px] font-mono text-gray-700">
+                      {Math.round(breakInBottomRpm).toLocaleString()} rpm{breakInFloorLimited ? " (floor)" : ""}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Lift-offs this lap</span>
+                    <span className="text-[11px] font-mono text-gray-700">{breakInCycles.toLocaleString()}</span>
                   </div>
                 </div>
 
-                {/* Onset */}
+                {/* Limit RPM */}
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-xs font-medium text-gray-600">Onset</span>
-                  <span className="text-[10px] text-gray-500 font-mono">{rpmLimitOnset.toLocaleString()}</span>
+                  <span className="text-xs font-medium text-gray-600">Limit RPM</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInLimitRpm.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center gap-2 mb-4">
-                  <input type="range" className="flex-1" min={4000} max={14000} step={100} value={rpmLimitOnset}
-                    onChange={(e) => onFiltersChange({ ...filters, rpmLimitOnset: parseInt(e.target.value) })} />
+                  <input type="range" className="flex-1" min={6000} max={16000} step={100} value={breakInLimitRpm}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInLimitRpm: parseInt(e.target.value) })} />
                   <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
-                    value={rpmLimitOnset} min={0} max={20000} step={100}
-                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, rpmLimitOnset: v }); }} />
+                    value={breakInLimitRpm} min={0} max={25000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, breakInLimitRpm: v }); }} />
                 </div>
 
-                {/* Ceiling */}
+                {/* Floor RPM */}
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-xs font-medium text-gray-600">Ceiling</span>
-                  <span className="text-[10px] text-gray-500 font-mono">{rpmLimitCeiling.toLocaleString()}</span>
+                  <span className="text-xs font-medium text-gray-600">Floor RPM</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInFloorRpm.toLocaleString()}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input type="range" className="flex-1" min={8000} max={16000} step={100} value={rpmLimitCeiling}
-                    onChange={(e) => onFiltersChange({ ...filters, rpmLimitCeiling: parseInt(e.target.value) })} />
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={2000} max={12000} step={100} value={breakInFloorRpm}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInFloorRpm: parseInt(e.target.value) })} />
                   <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
-                    value={rpmLimitCeiling} min={0} max={25000} step={100}
-                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, rpmLimitCeiling: v }); }} />
+                    value={breakInFloorRpm} min={0} max={20000} step={100}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, breakInFloorRpm: v }); }} />
+                </div>
+
+                {/* Decay rate */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Decay rate</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInDecayRate.toLocaleString()} rpm/s</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={100} max={5000} step={50} value={breakInDecayRate}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInDecayRate: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={breakInDecayRate} min={1} max={20000} step={50}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) onFiltersChange({ ...filters, breakInDecayRate: v }); }} />
+                </div>
+
+                {/* Decay duration */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Decay duration</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInDecayDuration}s</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={0.5} max={15} step={0.5} value={breakInDecayDuration}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInDecayDuration: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={breakInDecayDuration} min={0.1} max={60} step={0.5}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) onFiltersChange({ ...filters, breakInDecayDuration: v }); }} />
+                </div>
+
+                {/* Resume rate */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Resume rate</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInResumeRate.toLocaleString()} rpm/s</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={100} max={5000} step={50} value={breakInResumeRate}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInResumeRate: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={breakInResumeRate} min={1} max={20000} step={50}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) onFiltersChange({ ...filters, breakInResumeRate: v }); }} />
+                </div>
+
+                {/* Smoothing — rounds the harsh decay→resume corner */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Smoothing</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInSmoothing > 0 ? `${breakInSmoothing.toFixed(2)}s` : "off"}</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-2 leading-relaxed">
+                  Rounds the corner where the lift-off coast-down turns back into the climb. 0 = sharp.
+                </p>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={0} max={1} step={0.05} value={breakInSmoothing}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInSmoothing: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={breakInSmoothing} min={0} max={3} step={0.05}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, breakInSmoothing: v }); }} />
+                </div>
+
+                {/* Throttle return — how fast throttle eases back to the lap data on resume */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Throttle return</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{breakInThrottleResume > 0 ? `${breakInThrottleResume.toFixed(2)}s` : "instant"}</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-2 leading-relaxed">
+                  Time for throttle to ease (cosine) from 0 back to the lap value once the lift-off ends.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input type="range" className="flex-1" min={0} max={2} step={0.05} value={breakInThrottleResume}
+                    onChange={(e) => onFiltersChange({ ...filters, breakInThrottleResume: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-14 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={breakInThrottleResume} min={0} max={5} step={0.05}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, breakInThrottleResume: v }); }} />
+                </div>
+
+                {/* Lap-time correction — stretch the timeline so the lifts take realistically longer */}
+                <div className="mt-5 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-700">Correct lap time</span>
+                    <button onClick={() => onFiltersChange({ ...filters, lapTimeCorrectionEnabled: !lapTimeCorrectionEnabled })}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${lapTimeCorrectionEnabled ? "bg-red-600" : "bg-gray-300"}`}>
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${lapTimeCorrectionEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
+                    The kart is slower wherever RPM is pulled down (speed tracks RPM through the axle), so the timeline is stretched to match — the lift sections take longer and the lap time grows.
+                  </p>
+                  <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-gray-500">Lap time</span>
+                      <span className="text-[11px] font-mono text-gray-500">{formatLapTime(lapTimeOriginal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-semibold text-gray-700">Corrected</span>
+                      <span className="text-[12px] font-mono font-semibold text-red-600">{formatLapTime(lapTimeCorrected)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-gray-500">Added</span>
+                      <span className="text-[11px] font-mono text-gray-700">+{Math.max(0, lapTimeCorrected - lapTimeOriginal).toFixed(2)}s</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
