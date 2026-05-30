@@ -11,6 +11,7 @@ export interface FilterSettings {
   throttleCeiling: number; // sensor ceiling % — values at this level become 100%
   throttleFloor: number; // minimum throttle % — values below are clamped up
   throttleDecimals: boolean; // use decimal precision for throttle output
+  exportMetadata: boolean; // include MyChron metadata header + column names on export
   breakInEnabled: boolean; // break-in load/unload cycle on/off
   breakInLimitRpm: number; // max allowed RPM — reaching it triggers a lift-off
   breakInFloorRpm: number; // absolute RPM floor — a decay never drops below this
@@ -20,6 +21,9 @@ export interface FilterSettings {
   breakInSmoothing: number; // rounds the lift-off→resume corner (seconds, 0 = off)
   breakInThrottleResume: number; // seconds for throttle to ramp back to data on resume
   lapTimeCorrectionEnabled: boolean; // stretch the timeline so lift-offs take realistically longer
+  loopEnabled: boolean; // repeat the lap to build a longer session
+  loopCount: number; // total times the lap plays (>= 2 when enabled)
+  loopBridgeDuration: number; // seconds of smooth RPM bridge inserted between laps (0 = hard seam)
 }
 
 export const DEFAULT_FILTERS: FilterSettings = {
@@ -33,6 +37,7 @@ export const DEFAULT_FILTERS: FilterSettings = {
   throttleCeiling: 100,
   throttleFloor: 0,
   throttleDecimals: false,
+  exportMetadata: false,
   breakInEnabled: false,
   breakInLimitRpm: 13500,
   breakInFloorRpm: 7000,
@@ -42,6 +47,9 @@ export const DEFAULT_FILTERS: FilterSettings = {
   breakInSmoothing: 0.25,
   breakInThrottleResume: 0.5,
   lapTimeCorrectionEnabled: false,
+  loopEnabled: false,
+  loopCount: 5,
+  loopBridgeDuration: 1.5,
 };
 
 export function defaultInterpolationSteps(channels: string[], sampleRate: number): Record<string, number> {
@@ -203,6 +211,56 @@ export function applyEndTransition(data: DataPoint[], duration: number, step: nu
   }
 
   return [...data, ...ramp];
+}
+
+/**
+ * Repeat the lap `count` times to build a longer session.
+ *
+ * Each repeat is the same lap shifted forward in time. Between consecutive
+ * laps an optional smooth bridge (cosine ramp) eases RPM/throttle/GPS from the
+ * previous lap's end to the next lap's start, so there is no instant jump at the
+ * seam. With `bridgeDuration = 0` the laps are concatenated as a hard seam.
+ */
+export function applyLoop(data: DataPoint[], count: number, bridgeDuration: number, step: number): DataPoint[] {
+  if (data.length === 0 || count <= 1) return data;
+
+  const timeStep = Math.max(step, 0.01);
+  const round = (t: number) => Math.round(t * 1000) / 1000;
+  const t0 = data[0].time;
+  const lapDuration = data[data.length - 1].time - t0;
+  const first = data[0];
+
+  const result: DataPoint[] = [];
+  let cursor = t0; // session time where the next lap's start maps to
+
+  for (let lap = 0; lap < count; lap++) {
+    // Smooth bridge from the previous lap's end back to this lap's start.
+    if (lap > 0 && bridgeDuration > 0 && result.length > 0) {
+      const prev = result[result.length - 1];
+      for (let t = timeStep; t < bridgeDuration; t = round(t + timeStep)) {
+        const smooth = (1 - Math.cos((t / bridgeDuration) * Math.PI)) / 2; // 0 → 1
+        result.push({
+          time: round(cursor + t),
+          rpm: prev.rpm + smooth * (first.rpm - prev.rpm),
+          throttle:
+            prev.throttle === null && first.throttle === null
+              ? null
+              : (prev.throttle ?? 0) + smooth * ((first.throttle ?? 0) - (prev.throttle ?? 0)),
+          gpsLat: prev.gpsLat + smooth * (first.gpsLat - prev.gpsLat),
+          gpsLon: prev.gpsLon + smooth * (first.gpsLon - prev.gpsLon),
+        });
+      }
+      cursor = round(cursor + bridgeDuration);
+    }
+
+    // The lap itself, shifted to start at the current cursor.
+    for (const d of data) {
+      result.push({ ...d, time: round(cursor + (d.time - t0)) });
+    }
+    cursor = round(cursor + lapDuration);
+  }
+
+  return result;
 }
 
 /**

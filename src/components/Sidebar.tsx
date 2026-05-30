@@ -21,6 +21,7 @@ interface SidebarProps {
   breakInCycles: number;
   lapTimeOriginal: number;
   lapTimeCorrected: number;
+  sessionDuration: number;
 }
 
 /** Format seconds as m:ss.mmm (matching the MyChron segment style). */
@@ -62,6 +63,7 @@ export default function Sidebar({
   breakInCycles,
   lapTimeOriginal,
   lapTimeCorrected,
+  sessionDuration,
 }: SidebarProps) {
   // Safe defaults in case filters state is stale from HMR
   const throttleCeiling = filters.throttleCeiling ?? 100;
@@ -78,6 +80,9 @@ export default function Sidebar({
   const breakInSmoothing = filters.breakInSmoothing ?? 0.25;
   const breakInThrottleResume = filters.breakInThrottleResume ?? 0.5;
   const lapTimeCorrectionEnabled = filters.lapTimeCorrectionEnabled ?? false;
+  const loopEnabled = filters.loopEnabled ?? false;
+  const loopCount = filters.loopCount ?? 5;
+  const loopBridgeDuration = filters.loopBridgeDuration ?? 1.5;
 
   const updateChannelStep = (channel: string, value: number) => {
     if (isNaN(value) || value <= 0) return;
@@ -226,6 +231,30 @@ export default function Sidebar({
             </div>
             <p className="text-[10px] text-gray-500 leading-relaxed">
               Exports throttle values with 0.1% precision instead of whole numbers. Useful for servos that support fine-grained control.
+            </p>
+          </div>
+
+          {/* Export Metadata */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                Export Metadata
+              </h2>
+              <button
+                onClick={() => onFiltersChange({ ...filters, exportMetadata: !(filters.exportMetadata ?? false) })}
+                className={`relative w-9 h-5 rounded-full transition-colors ${
+                  (filters.exportMetadata ?? false) ? "bg-red-600" : "bg-gray-300"
+                }`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  (filters.exportMetadata ?? false) ? "translate-x-4" : "translate-x-0.5"
+                }`} />
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              {(filters.exportMetadata ?? false)
+                ? "Includes the session header and column names at the top of the exported CSV."
+                : "Exports raw comma-separated values only — no header, units, or column names."}
             </p>
           </div>
 
@@ -578,6 +607,63 @@ export default function Sidebar({
                   <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
                     value={filters.endTransitionRpm ?? 2000} min={0} max={20000} step={100}
                     onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, endTransitionRpm: v }); }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Loop */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                Loop
+              </h2>
+              <div className="flex items-center gap-2">
+                <ResetButton onClick={() => onFiltersChange({ ...filters, loopEnabled: DEFAULT_FILTERS.loopEnabled, loopCount: DEFAULT_FILTERS.loopCount, loopBridgeDuration: DEFAULT_FILTERS.loopBridgeDuration })} />
+                <button onClick={() => onFiltersChange({ ...filters, loopEnabled: !loopEnabled })}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${loopEnabled ? "bg-red-600" : "bg-gray-300"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${loopEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            {loopEnabled && (
+              <div>
+                <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
+                  Repeats the lap {loopCount}× to build a longer session{loopBridgeDuration > 0 ? `, with a ${loopBridgeDuration}s smooth bridge between laps` : " (hard seam)"}.
+                </p>
+
+                {/* Total session time readout */}
+                <div className="mb-4 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-semibold text-gray-700">Total session</span>
+                    <span className="text-[12px] font-mono font-semibold text-red-600">{formatLapTime(sessionDuration)}</span>
+                  </div>
+                </div>
+
+                {/* Repeats */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Repeats</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{loopCount}×</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input type="range" className="flex-1" min={2} max={100} step={1} value={loopCount}
+                    onChange={(e) => onFiltersChange({ ...filters, loopCount: parseInt(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={loopCount} min={2} max={1000} step={1}
+                    onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 2) onFiltersChange({ ...filters, loopCount: v }); }} />
+                </div>
+
+                {/* Bridge */}
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-medium text-gray-600">Bridge</span>
+                  <span className="text-[10px] text-gray-500 font-mono">{loopBridgeDuration.toFixed(1)}s</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" className="flex-1" min={0} max={10} step={0.5} value={loopBridgeDuration}
+                    onChange={(e) => onFiltersChange({ ...filters, loopBridgeDuration: parseFloat(e.target.value) })} />
+                  <input type="number" className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 text-right focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-100 transition-all"
+                    value={loopBridgeDuration} min={0} max={30} step={0.5}
+                    onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0) onFiltersChange({ ...filters, loopBridgeDuration: v }); }} />
                 </div>
               </div>
             )}

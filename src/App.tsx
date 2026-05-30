@@ -15,6 +15,7 @@ import {
   applyLapTimeCorrection,
   correctedLapTime,
   resolveDecay,
+  applyLoop,
 } from "./utils/filtering";
 import Sidebar from "./components/Sidebar";
 import DataCharts from "./components/DataCharts";
@@ -68,7 +69,7 @@ export default function App() {
   );
 
   const processed = useMemo(() => {
-    const empty = { data: [] as DataPoint[], lapTimeOriginal: 0, lapTimeCorrected: 0 };
+    const empty = { data: [] as DataPoint[], lapTimeOriginal: 0, lapTimeCorrected: 0, sessionDuration: 0 };
     if (!session) return empty;
     let data = interpolateData(session.data, filters.interpolationSteps);
     data = remapThrottle(data, filters.throttleCeiling ?? 100, filters.throttleFloor ?? 0);
@@ -101,14 +102,20 @@ export default function App() {
       core = applyLapTimeCorrection(original, limited, minStep);
     }
 
+    // Loop the fully-shaped lap to build a longer session, before the start/end
+    // ramps so those bookend the whole session rather than every lap.
     let out = core;
+    if ((filters.loopEnabled ?? false) && out.length > 0) {
+      out = applyLoop(out, filters.loopCount ?? 5, filters.loopBridgeDuration ?? 1.5, minStep);
+    }
     if (transitionEnabled && out.length > 0) {
       out = applyTransition(out, transitionDuration, minStep, filters.transitionStartRpm ?? 4000);
     }
     if ((filters.endTransitionEnabled ?? false) && out.length > 0) {
       out = applyEndTransition(out, filters.endTransitionDuration ?? 5, minStep, filters.endTransitionRpm ?? 2000);
     }
-    return { data: out, lapTimeOriginal, lapTimeCorrected };
+    const sessionDuration = out.length > 1 ? out[out.length - 1].time - out[0].time : 0;
+    return { data: out, lapTimeOriginal, lapTimeCorrected, sessionDuration };
   }, [session, filters, transitionEnabled, transitionDuration]);
 
   const processedData = processed.data;
@@ -161,14 +168,17 @@ export default function App() {
       if (!path) return;
       const channelNames = ["Time", "RPM", ...(session.hasThrottle ? ["Throttle"] : []), session.gpsLatChannel, session.gpsLonChannel];
       const parts: string[] = [];
-      if (session.rawHeader) {
-        parts.push(session.rawHeader, "");
-        const qh = channelNames.map(n => `"${n}"`).join(",");
-        parts.push(qh, qh);
-        const units: Record<string, string> = { Time: "sec", RPM: "rpm", Throttle: "%" };
-        parts.push(channelNames.map(n => `"${units[n] ?? ""}"`).join(","));
-        parts.push(channelNames.map((_, i) => `"${i === 0 ? "" : i}"`).join(","), "");
-      } else { parts.push(channelNames.join(",")); }
+      // Metadata header is opt-in. When off, export raw comma-separated values only.
+      if (filters.exportMetadata ?? false) {
+        if (session.rawHeader) {
+          parts.push(session.rawHeader, "");
+          const qh = channelNames.map(n => `"${n}"`).join(",");
+          parts.push(qh, qh);
+          const units: Record<string, string> = { Time: "sec", RPM: "rpm", Throttle: "%" };
+          parts.push(channelNames.map(n => `"${units[n] ?? ""}"`).join(","));
+          parts.push(channelNames.map((_, i) => `"${i === 0 ? "" : i}"`).join(","), "");
+        } else { parts.push(channelNames.join(",")); }
+      }
       for (const d of processedData) {
         const row = [d.time.toFixed(3), Math.round(d.rpm).toString()];
         if (session.hasThrottle) {
@@ -180,7 +190,7 @@ export default function App() {
       }
       await writeTextFile(path, parts.join("\n"));
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to export CSV"); }
-  }, [session, processedData]);
+  }, [session, processedData, filters]);
 
   const handleClose = useCallback(async () => {
     const yes = await confirm("Close the current file? Any unsaved changes will be lost.", {
@@ -284,6 +294,7 @@ export default function App() {
         breakInBottomRpm={breakInInfo.bottomRpm} breakInFloorLimited={breakInInfo.floorLimited}
         breakInCycles={breakInInfo.cycles}
         lapTimeOriginal={processed.lapTimeOriginal} lapTimeCorrected={processed.lapTimeCorrected}
+        sessionDuration={processed.sessionDuration}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative min-h-0 min-w-0">
